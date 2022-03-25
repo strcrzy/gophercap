@@ -291,7 +291,7 @@ func (h *Handle) Play() error {
 					continue loop
 				}
 				if h.rewriteSrcMAC != nil || h.rewriteDstMAC != nil {
-					p := gopacket.NewPacket(packet, layers.LayerTypeEthernet, gopacket.Lazy)
+					p := gopacket.NewPacket(packet, layers.LayerTypeEthernet, gopacket.Lazy, gopacket.NoCopy)
 					ethernetLayer := p.Layer(layers.LayerTypeEthernet)
 					ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
 					if h.rewriteSrcMAC != nil {
