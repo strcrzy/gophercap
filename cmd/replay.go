@@ -105,6 +105,8 @@ FATA[0005] send: Message too long
 				SkipOutOfOrder: viper.GetBool("replay.skip.out_of_order"),
 				SkipMTU:        viper.GetInt("replay.skip.mtu"),
 				Reorder:        viper.GetBool("replay.reorder.enabled"),
+				RewriteSrcMAC:  viper.GetString("replay.rewrite.src_mac"),
+				RewriteDstMAC:  viper.GetString("replay.rewrite.dst_mac"),
 				FilterRegex: func() *regexp.Regexp {
 					if pattern := viper.GetString("global.file.regexp"); pattern != "" {
 						re, err := regexp.Compile(pattern)
@@ -202,4 +204,10 @@ func init() {
 
 	replayCmd.PersistentFlags().Bool("reorder", false, "Enable packet reordering by timestamp. Adds overhead but is useful with out of order packets.")
 	viper.BindPFlag("replay.reorder.enabled", replayCmd.PersistentFlags().Lookup("reorder"))
+
+	replayCmd.PersistentFlags().String("rewrite-src-mac", "", "Rewrite source MAC address to specified value")
+	viper.BindPFlag("replay.rewrite.src_mac", replayCmd.PersistentFlags().Lookup("rewrite-src-mac"))
+
+	replayCmd.PersistentFlags().String("rewrite-dst-mac", "", "Rewrite destination MAC address to specified value")
+	viper.BindPFlag("replay.rewrite.dst_mac", replayCmd.PersistentFlags().Lookup("rewrite-dst-mac"))
 }
