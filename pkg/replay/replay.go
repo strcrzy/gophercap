@@ -21,10 +21,13 @@ import (
 	"errors"
 	"gopherCap/pkg/models"
 	"io"
+	"net"
 	"regexp"
 	"sort"
 	"time"
 
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"github.com/google/gopacket/pcapgo"
 	"github.com/sirupsen/logrus"
@@ -48,9 +51,10 @@ type Config struct {
 	ScaleEnabled  bool
 	ScalePerFile  bool
 
-	SkipOutOfOrder bool
-	SkipMTU        int
-
+	SkipOutOfOrder   bool
+	SkipMTU          int
+	RewriteSrcMAC    string
+	RewriteDstMAC    string
 	TimeFrom, TimeTo time.Time
 	Ctx              context.Context
 }
@@ -76,15 +80,17 @@ func (c Config) Validate() error {
 Handle is the core object managing replay state
 */
 type Handle struct {
-	FileSet     PcapSet
-	speedMod    float64
-	scale       bool
-	iface       string
-	disableWait bool
-	skipOOO     bool
-	skipMTU     int
-	outBpf      string
-	reorder     bool
+	FileSet       PcapSet
+	speedMod      float64
+	scale         bool
+	iface         string
+	disableWait   bool
+	skipOOO       bool
+	skipMTU       int
+	outBpf        string
+	reorder       bool
+	rewriteSrcMAC net.HardwareAddr
+	rewriteDstMAC net.HardwareAddr
 }
 
 /*
@@ -94,14 +100,24 @@ func NewHandle(c Config) (*Handle, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	srcMAC, err := net.ParseMAC(c.RewriteSrcMAC)
+	if err != nil {
+		return nil, err
+	}
+	dstMAC, err := net.ParseMAC(c.RewriteDstMAC)
+	if err != nil {
+		return nil, err
+	}
 	h := &Handle{
-		FileSet:     c.Set,
-		iface:       c.WriteInterface,
-		outBpf:      c.OutBpf,
-		disableWait: c.DisableWait,
-		skipOOO:     c.SkipOutOfOrder,
-		skipMTU:     c.SkipMTU,
-		reorder:     c.Reorder,
+		FileSet:       c.Set,
+		iface:         c.WriteInterface,
+		outBpf:        c.OutBpf,
+		disableWait:   c.DisableWait,
+		skipOOO:       c.SkipOutOfOrder,
+		skipMTU:       c.SkipMTU,
+		reorder:       c.Reorder,
+		rewriteSrcMAC: srcMAC,
+		rewriteDstMAC: dstMAC,
 	}
 	if c.FilterRegex != nil {
 		logrus.Info("Filtering pcap files")
@@ -273,6 +289,17 @@ func (h *Handle) Play() error {
 				if len(packet) > h.skipMTU {
 					oversize++
 					continue loop
+				}
+				if h.rewriteSrcMAC != nil || h.rewriteDstMAC != nil {
+					p := gopacket.NewPacket(packet, layers.LayerTypeEthernet, gopacket.Lazy)
+					ethernetLayer := p.Layer(layers.LayerTypeEthernet)
+					ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
+					if h.rewriteSrcMAC != nil {
+						ethernetPacket.SrcMAC = h.rewriteSrcMAC
+					}
+					if h.rewriteDstMAC != nil {
+						ethernetPacket.DstMAC = h.rewriteDstMAC
+					}
 				}
 				if err := writer.WritePacketData(packet); err != nil {
 					logrus.Error(err)
